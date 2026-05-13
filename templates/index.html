@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>LPR Dashboard</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+
+<script>
+tailwind.config = {
+    darkMode: 'class'
+}
+</script>
+
+</head>
+
+<body class="bg-gray-100 dark:bg-gray-900 transition duration-300">
+
+<!-- HEADER -->
+<header class="bg-white dark:bg-gray-800 shadow-md">
+<div class="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+
+<h1 class="text-xl font-bold text-gray-800 dark:text-white">
+🚗 License Plate Recognition System
+</h1>
+
+<nav class="flex items-center gap-6 text-gray-700 dark:text-gray-300 font-medium">
+
+<button onclick="showSection('dashboard')" class="hover:text-blue-600">
+Dashboard
+</button>
+
+<button onclick="showSection('camera')" class="hover:text-blue-600">
+Live Camera
+</button>
+
+<button onclick="showSection('history')" class="hover:text-blue-600">
+History
+</button>
+
+<button id="darkToggle"
+class="bg-gray-200 dark:bg-gray-700 px-3 py-1 rounded-lg text-sm">
+🌙
+</button>
+
+</nav>
+
+</div>
+</header>
+
+
+<!-- MAIN CONTENT -->
+<div class="max-w-7xl mx-auto px-6 py-10">
+
+<!-- DASHBOARD SECTION -->
+<div id="dashboardSection" class="hidden">
+
+<div class="grid md:grid-cols-2 gap-8">
+
+
+<!-- Upload Card -->
+<div class="bg-white dark:bg-gray-800 shadow-lg rounded-xl p-6">
+
+<h2 class="text-lg font-semibold text-gray-800 dark:text-white mb-4">
+Upload Vehicle Image
+</h2>
+
+<form id="uploadForm" class="space-y-4">
+
+<input
+type="file"
+id="imageInput"
+accept="image/*"
+required
+class="w-full border border-gray-300 dark:border-gray-600
+bg-white dark:bg-gray-700
+text-gray-800 dark:text-white
+rounded-lg p-2"
+/>
+
+<button
+type="submit"
+class="w-full bg-blue-600 hover:bg-blue-700
+text-white font-semibold py-2 rounded-lg">
+Upload & Detect
+</button>
+
+</form>
+
+<div id="spinner" class="hidden flex justify-center mt-6">
+<div class="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+</div>
+
+</div>
+
+
+<!-- Result Card -->
+<div class="bg-white dark:bg-gray-800 shadow-lg rounded-xl p-6 text-center">
+
+<h2 class="text-lg font-semibold text-gray-800 dark:text-white mb-4">
+Detection Result
+</h2>
+
+<p id="result" class="text-gray-800 dark:text-white font-medium"></p>
+
+<div class="mt-4 flex justify-center">
+<img id="plateImage"
+class="hidden rounded-lg shadow-md border dark:border-gray-600"
+width="300"/>
+</div>
+
+</div>
+
+</div>
+
+<div class="flex justify-center mt-10">
+
+<div class="bg-white dark:bg-gray-800 shadow-lg rounded-xl p-6 text-center w-[700px]">
+
+<h2 class="text-lg font-semibold text-gray-800 dark:text-white mb-4">
+
+<!-- Sample video -->
+🚘 Traffic Video Feed
+</h2>
+
+<video
+autoplay
+loop
+muted
+class="mx-auto rounded-lg border dark:border-gray-600"
+width="650">
+
+<source src="/static/traffic.mp4" type="video/mp4">
+
+</video>
+
+</div>
+
+</div>
+
+</div>
+
+
+<!-- CAMERA SECTION -->
+<div id="cameraSection">
+
+<div class="bg-white dark:bg-gray-800 shadow-lg rounded-xl p-6 text-center">
+
+<h2 class="text-lg font-semibold text-gray-800 dark:text-white mb-4">
+📷 Live Camera License Plate Detection
+</h2>
+
+<video id="video"
+class="mx-auto rounded-lg border dark:border-gray-600"
+width="450"
+autoplay>
+</video>
+
+<div class="mt-4 flex justify-center gap-4">
+
+<button id="startCamera"
+class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg">
+Start Camera
+</button>
+
+</div>
+
+<p id="cameraResult"
+class="mt-4 text-gray-800 dark:text-white font-medium">
+</p>
+
+</div>
+
+</div>
+
+
+<!-- HISTORY SECTION -->
+<div id="historySection" class="hidden">
+
+<div class="bg-white dark:bg-gray-800 shadow-lg rounded-xl p-6">
+
+<h2 class="text-lg font-semibold text-gray-800 dark:text-white mb-4">
+📜 Plate Detection History
+</h2>
+
+<div id="historyList"
+class="max-h-96 overflow-y-auto text-sm text-gray-700 dark:text-gray-300 border rounded-lg p-3">
+Loading history...
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+
+
+<!--Script Section -->
+<script>
+
+const form = document.getElementById("uploadForm");
+const spinner = document.getElementById("spinner");
+const resultText = document.getElementById("result");
+const plateImage = document.getElementById("plateImage");
+const darkToggle = document.getElementById("darkToggle");
+const video = document.getElementById("video");
+const startCamera = document.getElementById("startCamera");
+const captureFrame = document.getElementById("captureFrame");
+const cameraResult = document.getElementById("cameraResult");
+
+let stream;
+let detectionInterval;
+
+startCamera.addEventListener("click", async () => {
+
+try{
+
+stream = await navigator.mediaDevices.getUserMedia({
+video:true
+});
+
+video.srcObject = stream;
+
+/* start automatic detection every second */
+detectionInterval = setInterval(detectPlate, 1000);
+
+}catch(error){
+
+cameraResult.innerText="Camera access denied or not available";
+
+}
+
+});
+
+async function detectPlate(){
+
+if(video.videoWidth === 0 || video.videoHeight === 0){
+return;
+}
+
+const canvas = document.createElement("canvas");
+
+canvas.width = video.videoWidth;
+canvas.height = video.videoHeight;
+
+const ctx = canvas.getContext("2d");
+
+ctx.drawImage(video,0,0);
+
+const imageData = canvas.toDataURL("image/jpeg");
+
+try{
+
+const response = await fetch("/camera",{
+
+method:"POST",
+
+headers:{
+"Content-Type":"application/json"
+},
+
+body:JSON.stringify({
+image:imageData
+})
+
+});
+
+const data = await response.json();
+
+if(data.plate_text){
+
+cameraResult.innerText="Detected Plate: "+data.plate_text;
+
+}
+
+}catch(error){
+
+console.log("Detection error");
+
+}
+
+}
+
+// Theme Load
+if(localStorage.getItem("theme")==="dark"){
+document.documentElement.classList.add("dark");
+}
+
+darkToggle.addEventListener("click",()=>{
+
+if(document.documentElement.classList.contains("dark")){
+document.documentElement.classList.remove("dark");
+localStorage.setItem("theme","light");
+}else{
+document.documentElement.classList.add("dark");
+localStorage.setItem("theme","dark");
+}
+
+});
+
+
+// Navigation
+function showSection(section){
+
+document.getElementById("dashboardSection").classList.add("hidden");
+document.getElementById("historySection").classList.add("hidden");
+document.getElementById("cameraSection").classList.add("hidden");
+
+if(section==="dashboard"){
+document.getElementById("dashboardSection").classList.remove("hidden");
+}
+
+if(section==="history"){
+document.getElementById("historySection").classList.remove("hidden");
+loadHistory();
+}
+
+if(section==="camera"){
+document.getElementById("cameraSection").classList.remove("hidden");
+}
+
+}
+
+
+// Upload
+form.addEventListener("submit", async function(event){
+
+event.preventDefault();
+
+const fileInput = document.getElementById("imageInput");
+
+const formData = new FormData();
+formData.append("file",fileInput.files[0]);
+
+spinner.classList.remove("hidden");
+resultText.innerText="";
+plateImage.classList.add("hidden");
+
+const response = await fetch("/upload",{
+method:"POST",
+body:formData
+});
+
+const data = await response.json();
+
+spinner.classList.add("hidden");
+
+if(data.plate_text){
+
+resultText.innerText="Detected Plate Number: "+data.plate_text;
+
+const imageName=data.cropped_image_path.split("\\").pop();
+
+plateImage.src="/uploads/"+imageName;
+
+plateImage.classList.remove("hidden");
+
+loadHistory();
+
+}else if(data.error){
+
+resultText.innerText="Error: "+data.error;
+
+}else{
+
+resultText.innerText=data.message;
+
+}
+
+});
+
+
+
+
+// Load History
+async function loadHistory(){
+
+const response=await fetch("/history");
+
+const data=await response.json();
+
+const historyDiv=document.getElementById("historyList");
+
+historyDiv.innerHTML="";
+
+data.forEach(item=>{
+
+const row=document.createElement("div");
+
+row.className="border-b py-2 flex justify-between";
+
+row.innerHTML=`
+<span class="font-semibold">${item.plate_number}</span>
+<span class="text-gray-500">${item.time}</span>
+`;
+
+historyDiv.appendChild(row);
+
+});
+
+}
+
+loadHistory();
+
+window.onload = async function(){
+
+showSection("camera");
+
+try{
+
+stream = await navigator.mediaDevices.getUserMedia({
+video:true
+});
+
+video.srcObject = stream;
+
+/* start automatic detection time in miliseconds*/
+detectionInterval = setInterval(detectPlate, 5000);
+
+}catch(error){
+
+cameraResult.innerText="Camera access denied";
+
+}
+
+};
+
+</script>
+
+</body>
+</html>
